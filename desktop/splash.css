@@ -1,0 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    width: 420px;
+    height: 260px;
+    background: transparent;
+    overflow: hidden;
+    -webkit-user-select: none;
+}
+
+.splash {
+    width: 420px;
+    height: 260px;
+    background: #0a0a0a;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 52px 48px 36px;
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.splash-content { display: flex; flex-direction: column; gap: 6px; }
+
+.app-name {
+    font-family: -apple-system, 'SF Pro Display', 'JetBrains Mono', sans-serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.92);
+    letter-spacing: -0.4px;
+}
+
+.app-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.28);
+    letter-spacing: 0.5px;
+}
+
+.splash-footer { display: flex; flex-direction: column; gap: 10px; }
+
+.progress-track {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 1px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: rgba(255,255,255,0.5);
+    border-radius: 1px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.status-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 0.5px;
+}

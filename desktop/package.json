@@ -1,0 +1,15 @@
+{
+  "name": "crypto-terminal",
+  "version": "1.0.0",
+  "description": "Crypto Intelligence Terminal",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "dependencies": {
+    "lightweight-charts": "^4.2.0"
+  }
+}

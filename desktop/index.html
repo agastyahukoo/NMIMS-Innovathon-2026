@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://localhost:5000 https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:;">
+    <title>Crypto Terminal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+
+        <div class="titlebar">
+            <div class="titlebar-traffic"></div>
+            <div class="titlebar-center">
+                <span class="titlebar-name">Crypto Terminal</span>
+            </div>
+            <div class="titlebar-right">
+                <div class="connection-pill" id="connectionPill">
+                    <span class="conn-dot" id="connDot"></span>
+                    <span id="connLabel">Connecting</span>
+                </div>
+                <button class="tb-btn" id="settingsBtn">Settings</button>
+            </div>
+        </div>
+
+        <div class="layout">
+
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-label">Markets</div>
+                    <div class="coin-list" id="coinList"></div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-label">Interval</div>
+                    <div class="tf-row" id="timeframeGrid"></div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-label">Model</div>
+                    <select class="bare-select" id="modelSelect">
+                        <option>Loading...</option>
+                    </select>
+                    <button class="link-btn" id="manageModelsBtn">Manage models</button>
+                </div>
+
+                <div class="sidebar-bottom">
+                    <button class="sidebar-action-btn" id="refreshBtn">
+                        <span id="refreshIcon">↻</span> Refresh
+                    </button>
+                    <div class="ollama-row" id="ollamaStatus">
+                        <span class="sm-dot" id="ollamaDot"></span>
+                        <span id="ollamaLabel">Ollama</span>
+                    </div>
+                    <button class="term-toggle-btn" id="termToggleBtn">~ Terminal</button>
+                </div>
+            </aside>
+
+            <main class="chart-panel">
+                <div class="chart-topbar">
+                    <div class="chart-topbar-left">
+                        <span class="chart-pair" id="chartSymbol">BTC / USDT</span>
+                        <span class="chart-interval-tag" id="chartIntervalTag">1H</span>
+                        <span class="live-badge">
+                            <span class="live-dot"></span>Live
+                        </span>
+                    </div>
+                    <div class="chart-topbar-right">
+                        <span class="chart-price-big" id="chartCurrentPrice">—</span>
+                        <span class="chart-delta" id="chartPriceChange">—</span>
+                    </div>
+                </div>
+                <div class="chart-area">
+                    <div id="chartContainer" class="chart-inner"></div>
+                    <div class="chart-overlay" id="chartLoading">
+                        <div class="loading-row">
+                            <div class="spin"></div>
+                            <span>Fetching data</span>
+                        </div>
+                    </div>
+                    <div class="chart-overlay hidden" id="chartError">
+                        <span id="chartErrorMsg">Failed to load</span>
+                        <button class="ghost-btn" id="chartRetryBtn">Retry</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="right-col">
+
+                <section class="insight-section">
+                    <div class="section-header">
+                        <span class="section-title">Market Intelligence</span>
+                        <span class="section-meta" id="insightUpdated">—</span>
+                    </div>
+                    <div class="insight-body" id="insightBody">
+                        <div class="center-spin"><div class="spin spin--sm"></div></div>
+                    </div>
+                    <div class="sentiment-strip" id="sentimentBody">
+                        <div class="sent-placeholder">
+                            <span class="sm-dot"></span>
+                            <span>Reddit sentiment pending…</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="chat-section">
+                    <div class="section-header">
+                        <span class="section-title">AI Analyst</span>
+                        <button class="ghost-text-btn" id="clearChatBtn">Clear</button>
+                    </div>
+                    <div class="messages" id="chatMessages">
+                        <div class="chat-empty" id="chatEmpty">
+                            <p class="chat-empty-label">Ask about the current market</p>
+                            <div class="chips" id="suggestionChips">
+                                <button class="chip" data-msg="What does the current price action suggest?">Price action</button>
+                                <button class="chip" data-msg="What trend do you see on this chart?">Trend</button>
+                                <button class="chip" data-msg="What key levels should I watch?">Key levels</button>
+                                <button class="chip" data-msg="What does Reddit sentiment indicate?">Reddit mood</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-row">
+                        <input class="chat-input" id="chatInput" type="text" placeholder="Ask anything…" maxlength="500" autocomplete="off">
+                        <button class="send-btn" id="sendBtn">↑</button>
+                    </div>
+                </section>
+
+            </aside>
+        </div>
+
+        <div class="terminal-panel hidden" id="terminalPanel">
+            <div class="term-header">
+                <div class="term-header-left">
+                    <span class="term-dot term-dot--red"></span>
+                    <span class="term-dot term-dot--yellow"></span>
+                    <span class="term-dot term-dot--green"></span>
+                    <span class="term-title">Pipeline Log</span>
+                </div>
+                <div class="term-header-right">
+                    <span class="term-hint">~ to toggle</span>
+                    <button class="term-clear-btn" id="termClearBtn">Clear</button>
+                </div>
+            </div>
+            <div class="term-output" id="terminalOutput"></div>
+        </div>
+
+    </div>
+
+    <div class="overlay hidden" id="setupModal">
+        <div class="sheet">
+            <h2 class="sheet-title">Welcome</h2>
+            <p class="sheet-sub">Configure your terminal to get started</p>
+
+            <div class="field">
+                <label class="field-label">Binance API Key <span class="opt-tag">optional</span></label>
+                <input type="password" class="field-input" id="setupApiKey" placeholder="Paste key here — public data works without one">
+            </div>
+
+            <div class="field">
+                <label class="field-label">Default AI Model</label>
+                <select class="field-input" id="setupModelSelect">
+                    <option>Loading installed models...</option>
+                </select>
+            </div>
+
+            <button class="primary-btn" id="setupLaunchBtn">Open Terminal</button>
+            <button class="ghost-text-btn" id="setupSkipBtn">Skip</button>
+        </div>
+    </div>
+
+    <div class="overlay hidden" id="settingsModal">
+        <div class="sheet sheet--wide">
+            <div class="sheet-header-row">
+                <h2 class="sheet-title">Settings</h2>
+                <button class="close-btn" id="settingsCloseBtn">✕</button>
+            </div>
+
+            <div class="field">
+                <label class="field-label">Binance API Key</label>
+                <div class="input-row">
+                    <input type="password" class="field-input" id="settingsApiKey" placeholder="Your Binance API key">
+                    <button class="small-btn" id="saveApiKeyBtn">Save</button>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="field">
+                <label class="field-label">Installed Models</label>
+                <div class="model-list" id="settingsModelList"></div>
+            </div>
+
+            <div class="field">
+                <label class="field-label">Install Model</label>
+                <div class="input-row">
+                    <input type="text" class="field-input" id="installModelInput" placeholder="e.g. llama3.1:8b  mistral  phi3">
+                    <button class="small-btn" id="installModelBtn">Pull</button>
+                </div>
+                <div class="model-tags">
+                    <span class="model-tag" data-model="llama3.2">llama3.2</span>
+                    <span class="model-tag" data-model="llama3.1:8b">llama3.1:8b</span>
+                    <span class="model-tag" data-model="llama3.1:14b">llama3.1:14b</span>
+                    <span class="model-tag" data-model="mistral">mistral</span>
+                    <span class="model-tag" data-model="phi3">phi3</span>
+                </div>
+                <div class="install-status hidden" id="installStatus">
+                    <div class="spin spin--sm"></div>
+                    <span id="installStatusText">Downloading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="renderer.js"></script>
+</body>
+</html>
