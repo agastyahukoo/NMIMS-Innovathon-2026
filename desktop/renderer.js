@@ -9,24 +9,28 @@ let COINS = [
     { symbol: 'XRP', name: 'XRP',      ticker: 'XRPUSDT', subreddits: ['XRP','CryptoCurrency'] },
 ]
 
-const INTERVALS = ['5m', '15m', '1h', '4h', '1d']
+const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']
 
-let activeCoin      = COINS[0]
-let activeInterval  = '1h'
-let activeModel     = ''
-let chatHistory     = []
-let chart           = null
-let candleSeries    = null
-let volumeSeries    = null
-let priceContext    = ''
-let isChatLoading   = false
-let terminalVisible = false
-let terminalLog     = []
-let pipelineRunning = false
+let activeCoin        = COINS[0]
+let activeInterval    = '1h'
+let activeModel       = ''
+let chatHistory       = []
+let chart             = null
+let candleSeries      = null
+let volumeSeries      = null
+let priceContext      = ''
+let isChatLoading     = false
+let terminalVisible   = false
+let terminalLog       = []
+let pipelineRunning   = false
+let phVisible         = false
+let phActiveFilter    = 'all'
+let phAllForecasts    = []
 
 let chartTimer    = null
 let insightTimer  = null
 let pipelineTimer = null
+let forecastTimer = null
 
 const notifSettings = {
     enabled:    true,
@@ -83,6 +87,11 @@ async function init() {
         if (saved && saved.length) COINS = saved
     }
 
+    // Restore scrollbar preference
+    if (localStorage.getItem('scrollbarsHidden') === 'true') {
+        document.body.classList.add('scrollbars-hidden')
+    }
+
     const ready = await waitForBackend()
     if (!ready) {
         $('connLabel').textContent = 'Offline'
@@ -117,6 +126,24 @@ async function init() {
     $('sendBtn').addEventListener('click', sendChat)
     $('chartRetryBtn').addEventListener('click', loadCoinData)
 
+    // Price history panel
+    const phBtn = $('phBtn')
+    if (phBtn) phBtn.addEventListener('click', togglePriceHistory)
+    const phToggleBtn = $('phToggleBtn')
+    if (phToggleBtn) phToggleBtn.addEventListener('click', togglePriceHistory)
+    const phCloseBtn = $('phCloseBtn')
+    if (phCloseBtn) phCloseBtn.addEventListener('click', togglePriceHistory)
+
+    // ph horizon filters
+    document.querySelectorAll('.ph-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.ph-filter-btn').forEach(b => b.classList.remove('active'))
+            btn.classList.add('active')
+            phActiveFilter = btn.dataset.h
+            renderPhTable(phAllForecasts)
+        })
+    })
+
     document.querySelectorAll('.chip').forEach(btn => {
         btn.addEventListener('click', () => { $('chatInput').value = btn.dataset.msg; sendChat() })
     })
@@ -126,6 +153,12 @@ async function init() {
         if (e.key === '`' || e.key === '~') {
             e.preventDefault()
             toggleTerminal()
+        }
+        if (e.key === 'p' || e.key === 'P') {
+            if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault()
+                togglePriceHistory()
+            }
         }
     })
 }
@@ -341,6 +374,7 @@ async function loadCoinData() {
     addLog(`Selected symbol: ${activeCoin.symbol}`)
     await Promise.all([loadChart(), loadInsight()])
     loadForecast()
+    loadMultiForecast()
     runPipeline()
 }
 
@@ -744,6 +778,19 @@ function setupSettingsListeners() {
     installBtn.parentNode.replaceChild(ni, installBtn)
     ni.addEventListener('click', installModel)
 
+    // Scrollbar toggle
+    const sbToggle = $('scrollbarToggle')
+    if (sbToggle) {
+        sbToggle.checked = !document.body.classList.contains('scrollbars-hidden')
+        // Clone to remove old listeners
+        const sbNew = sbToggle.cloneNode(true)
+        sbToggle.parentNode.replaceChild(sbNew, sbToggle)
+        sbNew.addEventListener('change', () => {
+            document.body.classList.toggle('scrollbars-hidden', !sbNew.checked)
+            localStorage.setItem('scrollbarsHidden', String(!sbNew.checked))
+        })
+    }
+
     document.querySelectorAll('.model-tag').forEach(chip => {
         chip.addEventListener('click', () => { $('installModelInput').value = chip.dataset.model })
     })
@@ -809,20 +856,53 @@ function showAboutModal() {
     const overlay = document.createElement('div')
     overlay.className = 'overlay'; overlay.id = 'aboutModal'
     overlay.innerHTML = `
-        <div class="sheet" style="text-align:center;gap:12px">
-            <div style="font-size:32px;margin-bottom:4px">⬡</div>
-            <h2 class="sheet-title">Crypto Terminal</h2>
-            <p style="font-size:11px;color:var(--text-2)">Version 2.0.0 · NMIMS Innovathon 2026</p>
-            <p style="font-size:11px;color:var(--text-2);line-height:1.7">
-                An AI-powered cryptocurrency analysis terminal.<br>
-                Combines real-time Binance data, Reddit sentiment,<br>
-                and local LLM analysis via Ollama.
-            </p>
-            <p style="font-size:10px;color:var(--text-3)">Educational use only. Not financial advice.</p>
-            <button class="primary-btn" id="aboutCloseBtn">Close</button>
+        <div class="about-sheet">
+            <button class="close-btn about-close" id="aboutCloseBtn">✕</button>
+
+            <div class="about-hero">
+                <div class="about-icon">⬡</div>
+                <div>
+                    <div class="about-name">Crypto Terminal</div>
+                    <div class="about-ver">v1.0.0 · Market Intelligence Platform · NMIMS Innovathon 2026</div>
+                </div>
+            </div>
+
+            <div class="about-divider"></div>
+            <div class="about-section-label">Features</div>
+            <div class="about-features">
+                <div class="about-feat"><span class="feat-icon">📈</span><div><div class="feat-title">Live Candlestick Charts</div><div class="feat-sub">Real-time Binance data across 6 intervals (1m → 1d) with volume overlay</div></div></div>
+                <div class="about-feat"><span class="feat-icon">🎯</span><div><div class="feat-title">6-Horizon Price Forecasting</div><div class="feat-sub">Precise $ targets for 1m · 5m · 15m · 1h · 4h · 1d with CI bands and accuracy tracking</div></div></div>
+                <div class="about-feat"><span class="feat-icon">🤖</span><div><div class="feat-title">Local AI Analysis via Ollama</div><div class="feat-sub">Fully private — no data leaves your machine. Chat with any installed model</div></div></div>
+                <div class="about-feat"><span class="feat-icon">📡</span><div><div class="feat-title">Reddit Sentiment Analysis</div><div class="feat-sub">Live community mood scored and tracked per coin</div></div></div>
+                <div class="about-feat"><span class="feat-icon">⚗️</span><div><div class="feat-title">Backtesting Engine</div><div class="feat-sub">Walk-forward signal replay with win rate and Sharpe ratio</div></div></div>
+                <div class="about-feat"><span class="feat-icon">🧠</span><div><div class="feat-title">ML Evaluation (Prophet)</div><div class="feat-sub">Time-series model vs technical baseline with full confusion matrix</div></div></div>
+                <div class="about-feat"><span class="feat-icon">◈</span><div><div class="feat-title">Price History Panel</div><div class="feat-sub">Full forecast log with per-horizon accuracy stats — press P to toggle</div></div></div>
+            </div>
+
+            <div class="about-divider"></div>
+            <div class="about-section-label">Tech Stack</div>
+            <div class="about-stack">
+                <span class="stack-pill">Electron</span>
+                <span class="stack-pill">Python · Flask</span>
+                <span class="stack-pill">SQLite</span>
+                <span class="stack-pill">Ollama</span>
+                <span class="stack-pill">Binance API</span>
+                <span class="stack-pill">lightweight-charts</span>
+                <span class="stack-pill">Prophet</span>
+                <span class="stack-pill">NumPy</span>
+                <span class="stack-pill">Reddit API</span>
+            </div>
+
+            <div class="about-divider"></div>
+            <div class="about-footer">
+                <span class="about-disclaimer">⚠ Educational simulation only · Not financial advice</span>
+                <span class="about-event">NMIMS Innovathon 2026</span>
+            </div>
         </div>`
     document.body.appendChild(overlay)
-    overlay.addEventListener('click', e => { if (e.target === overlay || e.target.id === 'aboutCloseBtn') overlay.classList.add('hidden') })
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay || e.target.id === 'aboutCloseBtn') overlay.classList.add('hidden')
+    })
 }
 
 function openCustomMarketModal() {
@@ -832,101 +912,156 @@ function openCustomMarketModal() {
     const overlay = document.createElement('div')
     overlay.className = 'overlay'; overlay.id = 'customMarketModal'
     overlay.innerHTML = `
-        <div class="sheet">
+        <div class="sheet sheet--wide" style="max-height:88vh;overflow-y:auto">
             <div class="sheet-header-row">
                 <h2 class="sheet-title">Import Custom Market</h2>
                 <button class="close-btn" id="customMarketClose">✕</button>
             </div>
 
             <div class="field">
-                <label class="field-label">Search Binance Markets</label>
+                <label class="field-label">Search Binance USDT Markets</label>
                 <div style="position:relative">
                     <input type="text" class="field-input" id="cmSearch"
-                        placeholder="Type a symbol — e.g. DOGE, PEPE, WIF…"
+                        placeholder="Type symbol — DOGE, PEPE, WIF, AVAX…"
                         maxlength="20" autocomplete="off" style="width:100%">
                     <div id="cmDropdown" style="
-                        display:none; position:absolute; top:100%; left:0; right:0; z-index:100;
-                        background:var(--bg-2); border:1px solid var(--line-bright);
-                        border-top:none; border-radius:0 0 6px 6px;
-                        max-height:200px; overflow-y:auto;
+                        display:none;position:absolute;top:100%;left:0;right:0;z-index:100;
+                        background:var(--bg-2);border:1px solid var(--line-bright);
+                        border-top:none;border-radius:0 0 6px 6px;max-height:220px;overflow-y:auto
                     "></div>
                 </div>
                 <div id="cmSearchStatus" style="font-size:9px;color:var(--text-3);margin-top:4px;min-height:14px"></div>
             </div>
 
+            <div id="cmMarketCard" style="display:none"></div>
+
             <div id="cmFields" style="display:none;flex-direction:column;gap:12px">
                 <div class="field">
-                    <label class="field-label">Symbol <span class="opt-tag">auto-filled</span></label>
-                    <input type="text" class="field-input" id="cmSymbol" readonly
-                        style="opacity:0.7;cursor:default">
-                </div>
-                <div class="field">
-                    <label class="field-label">Binance Ticker <span class="opt-tag">auto-filled</span></label>
-                    <input type="text" class="field-input" id="cmTicker" readonly
-                        style="opacity:0.7;cursor:default">
-                </div>
-                <div class="field">
                     <label class="field-label">Display Name <span class="opt-tag">editable</span></label>
-                    <input type="text" class="field-input" id="cmName"
-                        placeholder="e.g. Dogecoin" maxlength="40">
+                    <input type="text" class="field-input" id="cmName" placeholder="e.g. Dogecoin" maxlength="40">
                 </div>
                 <div class="field">
-                    <label class="field-label">Subreddits <span class="opt-tag">comma-separated, optional</span></label>
-                    <input type="text" class="field-input" id="cmSubs"
-                        placeholder="dogecoin, CryptoCurrency" maxlength="200">
+                    <label class="field-label">Subreddits <span class="opt-tag">comma-separated · optional</span></label>
+                    <input type="text" class="field-input" id="cmSubs" placeholder="dogecoin, CryptoCurrency" maxlength="200">
                 </div>
+                <input type="hidden" id="cmSymbol">
+                <input type="hidden" id="cmTicker">
             </div>
 
-            <button class="primary-btn" id="cmAddBtn" style="display:none">Add Market</button>
+            <button class="primary-btn" id="cmAddBtn" style="display:none;margin-top:4px">+ Add to Markets</button>
             <p id="cmMsg" style="font-size:10px;min-height:14px;margin-top:4px"></p>
         </div>`
     document.body.appendChild(overlay)
 
     let searchTimer = null
+    let selectedResult = null
 
-    const searchInput  = $('cmSearch')
-    const dropdown     = $('cmDropdown')
-    const statusEl     = $('cmSearchStatus')
-    const fieldsDiv    = $('cmFields')
-    const addBtn       = $('cmAddBtn')
-    const msgEl        = $('cmMsg')
+    const searchInput = $('cmSearch')
+    const dropdown    = $('cmDropdown')
+    const statusEl    = $('cmSearchStatus')
+    const fieldsDiv   = $('cmFields')
+    const addBtn      = $('cmAddBtn')
+    const msgEl       = $('cmMsg')
+    const cardEl      = $('cmMarketCard')
 
-    function closeDropdown() {
-        dropdown.style.display = 'none'
-        dropdown.innerHTML = ''
+    function closeDropdown() { dropdown.style.display = 'none'; dropdown.innerHTML = '' }
+
+    async function buildMarketCard(result) {
+        cardEl.style.display = 'block'
+        cardEl.innerHTML = `<div class="cm-market-card">
+            <div style="font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">Selected Market</div>
+            <div class="cm-card-top">
+                <div>
+                    <div class="cm-card-sym">${escapeHtml(result.symbol)}</div>
+                    <div class="cm-card-name">${escapeHtml(result.ticker)}</div>
+                </div>
+                <div class="cm-card-right">
+                    <div class="cm-card-price">${fmtPrice(result.price)}</div>
+                    <div class="cm-card-chg ${result.change >= 0 ? 'up' : 'down'}">${result.change >= 0 ? '+' : ''}${result.change}% 24h</div>
+                </div>
+            </div>
+            <div class="cm-stats-row">
+                <div class="cm-stat"><div class="cm-stat-k">24h Vol</div><div class="cm-stat-v">${result.volume >= 1e9 ? (result.volume/1e9).toFixed(1)+'B' : result.volume >= 1e6 ? (result.volume/1e6).toFixed(1)+'M' : result.volume >= 1e3 ? (result.volume/1e3).toFixed(0)+'K' : result.volume.toFixed(0)}</div></div>
+                <div class="cm-stat"><div class="cm-stat-k">24h Change</div><div class="cm-stat-v" style="color:${result.change >= 0 ? 'var(--up)' : 'var(--down)'}">${result.change >= 0 ? '+' : ''}${result.change}%</div></div>
+                <div class="cm-stat"><div class="cm-stat-k">Rank</div><div class="cm-stat-v" id="cmRankVal">—</div></div>
+            </div>
+            <div id="cmSparkWrap" class="cm-sparkline-wrap" title="7-day price trend"></div>
+            <div class="cm-forecast-badge" id="cmForecastBadge">
+                <span class="cm-fc-label">1H Forecast</span>
+                <span class="cm-fc-val side"><div class="spin spin--sm" style="display:inline-block"></div></span>
+            </div>
+        </div>`
+
+        // Fetch sparkline (7-day closes from daily candles)
+        try {
+            const r = await fetch(`${API}/price?symbol=${result.ticker}&interval=1d&limit=14`)
+            const d = await r.json()
+            if (d.candles && d.candles.length > 1) {
+                const closes   = d.candles.map(c => c.close)
+                const minC     = Math.min(...closes)
+                const maxC     = Math.max(...closes)
+                const range    = maxC - minC || 1
+                const sparkEl  = $('cmSparkWrap')
+                if (sparkEl) {
+                    sparkEl.innerHTML = closes.map((c, i) => {
+                        const h   = Math.max(4, Math.round(((c - minC) / range) * 24))
+                        const col = c >= closes[Math.max(0,i-1)] ? 'var(--up)' : 'var(--down)'
+                        return `<div class="cm-spark-bar" style="height:${h}px;background:${col}"></div>`
+                    }).join('')
+                }
+            }
+        } catch {}
+
+        // Fetch quick 1h forecast for the selected coin
+        try {
+            const r = await fetch(`${API}/insight?symbol=${result.ticker}&interval=1h`)
+            const d = await r.json()
+            const badge = $('cmForecastBadge')
+            if (badge && !d.error) {
+                const dirCls = d.direction === 'UP' ? 'up' : d.direction === 'DOWN' ? 'down' : 'side'
+                const arrow  = d.direction === 'UP' ? '↑' : d.direction === 'DOWN' ? '↓' : '→'
+                badge.innerHTML = `
+                    <span class="cm-fc-label">1H Signal</span>
+                    <span class="cm-fc-val ${dirCls}">${arrow} ${d.direction} · ${d.confidence}</span>
+                    <span style="font-size:9px;color:var(--text-2)">${d.change_24h >= 0 ? '+' : ''}${Number(d.change_24h).toFixed(2)}% 24h</span>`
+            }
+        } catch {}
     }
 
-    function selectResult(result) {
+    async function selectResult(result) {
+        selectedResult = result
         closeDropdown()
         $('cmSymbol').value = result.symbol
         $('cmTicker').value = result.ticker
         $('cmName').value   = result.symbol
         fieldsDiv.style.display = 'flex'
         addBtn.style.display    = 'block'
-        statusEl.textContent = `Selected: ${result.ticker} · $${result.price.toLocaleString()} · ${result.change >= 0 ? '+' : ''}${result.change}%`
-        statusEl.style.color = result.change >= 0 ? 'var(--up)' : 'var(--down)'
+        statusEl.textContent = ''
+        await buildMarketCard(result)
         $('cmName').focus()
         $('cmName').select()
     }
 
     function renderDropdown(results) {
         if (!results.length) {
-            dropdown.innerHTML = `<div style="padding:10px 12px;font-size:10px;color:var(--text-3)">No USDT pairs found for that query</div>`
+            dropdown.innerHTML = `<div style="padding:10px 12px;font-size:10px;color:var(--text-3)">No USDT pairs found</div>`
             dropdown.style.display = 'block'
             return
         }
         dropdown.innerHTML = results.map(r => `
-            <div class="cm-result-row" data-symbol="${r.symbol}" data-ticker="${r.ticker}"
-                 data-price="${r.price}" data-change="${r.change}"
-                 style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line);
-                        display:flex;justify-content:space-between;align-items:center">
-                <div>
-                    <span style="font-size:11px;font-weight:500;color:var(--text-0)">${escapeHtml(r.symbol)}</span>
-                    <span style="font-size:9px;color:var(--text-3);margin-left:6px">${escapeHtml(r.ticker)}</span>
+            <div class="cm-result-row" data-symbol="${escapeHtml(r.symbol)}" data-ticker="${escapeHtml(r.ticker)}"
+                 data-price="${r.price}" data-change="${r.change}" data-volume="${r.volume || 0}"
+                 style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+                <div style="display:flex;flex-direction:column;gap:1px">
+                    <div>
+                        <span style="font-size:11px;font-weight:500;color:var(--text-0)">${escapeHtml(r.symbol)}</span>
+                        <span style="font-size:9px;color:var(--text-3);margin-left:6px">${escapeHtml(r.ticker)}</span>
+                    </div>
+                    <span style="font-size:9px;color:var(--text-2)">Vol ${r.volume >= 1e6 ? (r.volume/1e6).toFixed(0)+'M' : (r.volume/1e3).toFixed(0)+'K'} USDT</span>
                 </div>
                 <div style="text-align:right">
-                    <span style="font-size:10px;color:var(--text-1)">$${r.price >= 1 ? r.price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4}) : r.price.toFixed(6)}</span>
-                    <span style="font-size:9px;margin-left:6px;color:${r.change >= 0 ? 'var(--up)' : 'var(--down)'}">${r.change >= 0 ? '+' : ''}${r.change}%</span>
+                    <div style="font-size:11px;color:var(--text-0);font-variant-numeric:tabular-nums">${fmtPrice(r.price)}</div>
+                    <div style="font-size:9px;color:${r.change >= 0 ? 'var(--up)' : 'var(--down)'}">${r.change >= 0 ? '+' : ''}${r.change}%</div>
                 </div>
             </div>`).join('')
         dropdown.style.display = 'block'
@@ -939,7 +1074,8 @@ function openCustomMarketModal() {
                     symbol: row.dataset.symbol,
                     ticker: row.dataset.ticker,
                     price:  parseFloat(row.dataset.price),
-                    change: parseFloat(row.dataset.change)
+                    change: parseFloat(row.dataset.change),
+                    volume: parseFloat(row.dataset.volume)
                 })
             })
         })
@@ -951,41 +1087,33 @@ function openCustomMarketModal() {
         closeDropdown()
         fieldsDiv.style.display = 'none'
         addBtn.style.display    = 'none'
-        msgEl.textContent = ''
+        cardEl.style.display    = 'none'
+        msgEl.textContent       = ''
+        selectedResult          = null
 
-        if (!q) { statusEl.textContent = ''; statusEl.style.color = ''; return }
+        if (!q) { statusEl.textContent = ''; return }
 
-        statusEl.textContent = 'Searching Binance…'
+        statusEl.textContent = 'Searching…'
         statusEl.style.color = 'var(--text-3)'
 
         searchTimer = setTimeout(async () => {
             try {
                 const r    = await fetch(`${API}/search-markets?q=${encodeURIComponent(q)}`)
                 const data = await r.json()
-                if (data.error) {
-                    statusEl.textContent = `Search failed: ${data.error}`
-                    statusEl.style.color = 'var(--down)'
-                    return
-                }
-                statusEl.textContent = data.results.length
-                    ? `${data.results.length} USDT pair${data.results.length !== 1 ? 's' : ''} found — click one to select`
+                statusEl.textContent = data.results?.length
+                    ? `${data.results.length} pair${data.results.length !== 1 ? 's' : ''} found — click to select`
                     : 'No matches'
-                statusEl.style.color = 'var(--text-3)'
-                renderDropdown(data.results)
-            } catch (e) {
-                statusEl.textContent = 'Search unavailable — check backend'
+                renderDropdown(data.results || [])
+            } catch {
+                statusEl.textContent = 'Search failed — is backend running?'
                 statusEl.style.color = 'var(--down)'
             }
-        }, 300)
+        }, 280)
     })
 
     document.addEventListener('click', function outsideClick(e) {
-        if (!dropdown.contains(e.target) && e.target !== searchInput) {
-            closeDropdown()
-        }
-        if (e.target === overlay || e.target.id === 'customMarketClose') {
-            document.removeEventListener('click', outsideClick)
-        }
+        if (!dropdown.contains(e.target) && e.target !== searchInput) closeDropdown()
+        if (e.target === overlay || e.target.id === 'customMarketClose') document.removeEventListener('click', outsideClick)
     })
 
     addBtn.addEventListener('click', async () => {
@@ -994,15 +1122,16 @@ function openCustomMarketModal() {
         const ticker = $('cmTicker').value.trim().toUpperCase()
         const subs   = $('cmSubs').value.split(',').map(s => s.trim()).filter(Boolean)
 
-        if (!sym || !ticker) { msgEl.textContent = 'Please select a market from the search results.'; msgEl.style.color = 'var(--down)'; return }
-        if (COINS.find(c => c.symbol === sym)) { msgEl.textContent = `${sym} is already in your market list.`; msgEl.style.color = 'var(--down)'; return }
+        if (!sym || !ticker) { msgEl.textContent = 'Please select a market first.'; msgEl.style.color = 'var(--down)'; return }
+        if (COINS.find(c => c.symbol === sym)) { msgEl.textContent = `${sym} is already in your list.`; msgEl.style.color = 'var(--down)'; return }
 
         COINS.push({ symbol: sym, name, ticker, subreddits: subs.length ? subs : ['CryptoCurrency'] })
         if (eAPI) await eAPI.saveCoins(COINS)
         setupCoinList()
-        msgEl.style.color = 'var(--up)'
-        msgEl.textContent = `✓ ${name} (${sym}) added successfully`
-        setTimeout(() => overlay.remove(), 1000)
+        addLog(`Added custom market: ${sym}`, 'success')
+        msgEl.style.color  = 'var(--up)'
+        msgEl.textContent  = `✓ ${name} (${sym}) added`
+        setTimeout(() => overlay.remove(), 900)
     })
 
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
@@ -1219,10 +1348,12 @@ function startAutoRefresh() {
     if (chartTimer)    clearInterval(chartTimer)
     if (insightTimer)  clearInterval(insightTimer)
     if (pipelineTimer) clearInterval(pipelineTimer)
+    if (forecastTimer) clearInterval(forecastTimer)
 
-    chartTimer    = setInterval(loadChart,    60000)
-    insightTimer  = setInterval(loadInsight,  30000)
-    pipelineTimer = setInterval(runPipeline, 300000)
+    chartTimer    = setInterval(loadChart,          60000)
+    insightTimer  = setInterval(loadInsight,         30000)
+    forecastTimer = setInterval(loadMultiForecast,   60000)  // every 1 min — matches 1m horizon
+    pipelineTimer = setInterval(runPipeline,        300000)
 }
 
 function showChartLoading() { $('chartLoading').style.display = 'flex' }
@@ -1241,6 +1372,255 @@ function escapeHtml(str) {
     return String(str)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+}
+
+// ── Multi-horizon price forecasts ──────────────────────────────────────────
+
+async function loadMultiForecast() {
+    const gridEl = $('forecastGrid')
+    if (!gridEl) return
+    gridEl.innerHTML = `<div class="fc-loading"><div class="spin spin--sm"></div><span>Fetching price targets…</span></div>`
+    try {
+        const r = await fetch(`${API}/multi-forecast`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol: activeCoin.symbol })
+        })
+        const data = await r.json()
+        if (data.error) throw new Error(data.error)
+        renderMultiForecast(data)
+        const ts = $('forecastGridUpdated')
+        if (ts) ts.textContent = new Date().toLocaleTimeString()
+        loadForecastHistory()
+        fetch(`${API}/evaluate-price-forecasts`, { method: 'POST' }).catch(() => {})
+        addLog(`Price forecasts updated for ${activeCoin.symbol}`, 'success')
+    } catch (e) {
+        if (gridEl) gridEl.innerHTML = `<div class="fc-loading"><span style="color:var(--down)">Forecast unavailable — ${e.message}</span></div>`
+        addLog(`Multi-forecast: ${e.message}`, 'error')
+    }
+}
+
+function fmtPrice(p) {
+    if (p == null) return '—'
+    if (p >= 1000)  return '$' + Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    if (p >= 1)     return '$' + Number(p).toFixed(4)
+    if (p >= 0.01)  return '$' + Number(p).toFixed(5)
+    return '$' + Number(p).toFixed(7)
+}
+
+function renderMultiForecast(data) {
+    const gridEl = $('forecastGrid')
+    if (!gridEl || !data.forecasts) return
+
+    const rows = data.forecasts.map(fc => {
+        if (fc.error) return `
+            <div class="fc-row">
+                <span class="fc-horizon">${(fc.horizon||'').toUpperCase()}</span>
+                <span class="fc-price" style="color:var(--text-3)">—</span>
+                <span class="fc-dir side">—</span>
+                <span class="fc-pct side">—</span>
+                <span class="fc-conf">—</span>
+            </div>`
+
+        const isUp   = fc.direction === 'UP'
+        const isDn   = fc.direction === 'DOWN'
+        const dirCls = isUp ? 'up' : isDn ? 'down' : 'side'
+        const arrow  = isUp ? '↑' : isDn ? '↓' : '→'
+        const sign   = fc.pct_change >= 0 ? '+' : ''
+        const pctStr = `${sign}${Number(fc.pct_change).toFixed(3)}%`
+        const conf   = Math.round(fc.confidence * 100)
+
+        return `<div class="fc-row" title="90% CI: ${fmtPrice(fc.price_lower)} – ${fmtPrice(fc.price_upper)}">
+            <span class="fc-horizon">${(fc.horizon||'').toUpperCase()}</span>
+            <span class="fc-price">${fmtPrice(fc.price_target)}</span>
+            <span class="fc-dir ${dirCls}">${arrow} ${fc.direction}</span>
+            <span class="fc-pct ${dirCls}">${pctStr}</span>
+            <span class="fc-conf">${conf}%</span>
+        </div>`
+    }).join('')
+
+    gridEl.innerHTML = `
+        <div class="fc-header-row">
+            <span class="fc-col-h">TF</span>
+            <span class="fc-col-h">Target</span>
+            <span class="fc-col-h">Dir</span>
+            <span class="fc-col-h">Δ%</span>
+            <span class="fc-col-h">Conf</span>
+        </div>
+        ${rows}
+        <div class="fc-ci-hint">Hover row for 90% CI · Reg + RSI/EMA/BB · auto-evaluated</div>`
+}
+
+async function loadForecastHistory() {
+    try {
+        const r = await fetch(`${API}/forecast-history?symbol=${activeCoin.symbol}&limit=40`)
+        const data = await r.json()
+        if (data.error) throw new Error(data.error)
+        phAllForecasts = data.forecasts || []
+        renderForecastHistoryStrip(data)
+        if (phVisible) renderPhTable(phAllForecasts)
+        updatePhStats(data)
+    } catch (e) { /* silent */ }
+}
+
+function renderForecastHistoryStrip(data) {
+    const histEl = $('forecastHistory')
+    if (!histEl) return
+
+    const forecasts = (data.forecasts || []).filter(f => f.actual_price != null)
+    const stats     = data.stats || {}
+    const horizonOrder = ['1m','5m','15m','1h','4h','1d']
+
+    const statBadges = horizonOrder.map(h => {
+        const s = stats[h]
+        if (!s || s.evaluated === 0) return ''
+        const pct = Math.round((s.hit_rate || 0) * 100)
+        const cls = pct >= 65 ? 'acc-good' : pct >= 45 ? 'acc-ok' : 'acc-bad'
+        return `<span class="acc-badge ${cls}">${h.toUpperCase()} ${pct}%</span>`
+    }).filter(Boolean).join('')
+
+    if (!forecasts.length) {
+        histEl.innerHTML = `
+            <div class="fh-header">
+                <span class="fh-title">Accuracy ${statBadges ? `— <span class="acc-badges">${statBadges}</span>` : ''}</span>
+                <button class="fh-see-all" id="phToggleBtn">See all →</button>
+            </div>
+            <div class="fh-empty">Predictions evaluate after each horizon elapses</div>`
+        document.getElementById('phToggleBtn')?.addEventListener('click', togglePriceHistory)
+        return
+    }
+
+    const rows = forecasts.slice(0, 8).map(fc => {
+        const hit      = fc.hit_target === 1
+        const dirCls   = fc.direction === 'UP' ? 'up' : fc.direction === 'DOWN' ? 'down' : 'side'
+        const movePct  = fc.actual_pct != null
+            ? `${fc.actual_pct >= 0 ? '+' : ''}${Number(fc.actual_pct).toFixed(2)}%`
+            : '—'
+        return `<div class="fh-row">
+            <span class="fh-horizon">${(fc.horizon||'').toUpperCase()}</span>
+            <span class="fh-target">${fmtPrice(fc.price_target)}</span>
+            <span class="fh-actual">${fmtPrice(fc.actual_price)}</span>
+            <span class="fh-move ${dirCls}">${movePct}</span>
+            <span class="fh-result ${hit ? 'fh-hit' : 'fh-miss'}">${hit ? '✓ HIT' : '✗ MISS'}</span>
+        </div>`
+    }).join('')
+
+    const badgeHtml = statBadges ? `<div class="acc-badges">${statBadges}</div>` : ''
+
+    histEl.innerHTML = `
+        <div class="fh-header">
+            <span class="fh-title">Accuracy</span>
+            <div style="display:flex;align-items:center;gap:6px">
+                ${badgeHtml}
+                <button class="fh-see-all" id="phToggleBtn">All →</button>
+            </div>
+        </div>
+        <div class="fh-col-row">
+            <span>TF</span><span>Target</span><span>Actual</span><span>Move</span><span>Hit?</span>
+        </div>
+        ${rows}`
+    document.getElementById('phToggleBtn')?.addEventListener('click', togglePriceHistory)
+}
+
+// ── Price History Full Panel ────────────────────────────────────────────────
+
+function togglePriceHistory() {
+    phVisible = !phVisible
+    const panel = $('priceHistoryPanel')
+    const btn   = $('phBtn')
+    if (!panel) return
+
+    if (phVisible) {
+        panel.classList.remove('hidden')
+        if (btn) btn.classList.add('active')
+        const lbl = $('phCoinLabel')
+        if (lbl) lbl.textContent = `${activeCoin.symbol} · last 100`
+        renderPhTable(phAllForecasts)
+        if (!phAllForecasts.length) loadForecastHistory()
+    } else {
+        panel.classList.add('hidden')
+        if (btn) btn.classList.remove('active')
+    }
+}
+
+function updatePhStats(data) {
+    const statsRow = $('phStatsRow')
+    if (!statsRow) return
+    const stats = data.stats || {}
+    const all   = data.forecasts || []
+    const total = all.length
+    const evaluated = all.filter(f => f.actual_price != null).length
+    const hits  = all.filter(f => f.hit_target === 1).length
+    const rate  = evaluated > 0 ? Math.round(hits / evaluated * 100) : null
+
+    const horizons = ['1m','5m','15m','1h','4h','1d']
+    const bestH = horizons.reduce((best, h) => {
+        const s = stats[h]
+        if (!s || s.evaluated === 0) return best
+        if (!best || (s.hit_rate || 0) > (stats[best]?.hit_rate || 0)) return h
+        return best
+    }, null)
+
+    statsRow.innerHTML = `
+        <div class="ph-stat">
+            <div class="ph-stat-k">Total Forecasts</div>
+            <div class="ph-stat-v">${total}</div>
+        </div>
+        <div class="ph-stat">
+            <div class="ph-stat-k">Evaluated</div>
+            <div class="ph-stat-v">${evaluated}</div>
+        </div>
+        <div class="ph-stat">
+            <div class="ph-stat-k">Hit Rate (CI)</div>
+            <div class="ph-stat-v" style="color:${rate != null ? (rate >= 65 ? 'var(--up)' : rate >= 45 ? 'var(--neutral)' : 'var(--down)') : 'var(--text-2)'}">${rate != null ? rate + '%' : '—'}</div>
+        </div>
+        <div class="ph-stat">
+            <div class="ph-stat-k">Best Horizon</div>
+            <div class="ph-stat-v">${bestH ? bestH.toUpperCase() : '—'}</div>
+        </div>`
+}
+
+function renderPhTable(forecasts) {
+    const tbody = $('phTableBody')
+    if (!tbody) return
+
+    const filtered = phActiveFilter === 'all'
+        ? forecasts
+        : forecasts.filter(f => f.horizon === phActiveFilter)
+
+    if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:20px">No forecasts for this filter yet</td></tr>`
+        return
+    }
+
+    tbody.innerHTML = filtered.map(fc => {
+        const pending   = fc.actual_price == null
+        const hit       = fc.hit_target === 1
+        const isUp      = fc.direction === 'UP'
+        const isDn      = fc.direction === 'DOWN'
+        const dirCls    = isUp ? 'up' : isDn ? 'down' : ''
+        const movePct   = fc.actual_pct != null
+            ? `${fc.actual_pct >= 0 ? '+' : ''}${Number(fc.actual_pct).toFixed(3)}%`
+            : '—'
+        const timeStr   = fc.created_at
+            ? new Date(fc.created_at * 1000).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+            : '—'
+        const confStr   = fc.confidence != null ? Math.round(fc.confidence * 100) + '%' : '—'
+        const outClass  = pending ? 'pending' : hit ? 'hit' : 'miss'
+        const outLabel  = pending ? 'pending' : hit ? '✓ hit' : '✗ miss'
+        const ciTitle   = `90% CI: ${fmtPrice(fc.price_lower)} – ${fmtPrice(fc.price_upper)}`
+
+        return `<tr title="${ciTitle}">
+            <td class="ph-ts">${timeStr}</td>
+            <td><span style="font-size:9px;font-weight:500;color:var(--text-1)">${(fc.horizon||'').toUpperCase()}</span></td>
+            <td class="ph-num">${fmtPrice(fc.current_price)}</td>
+            <td class="ph-num ${dirCls}">${fmtPrice(fc.price_target)}</td>
+            <td class="ph-num">${pending ? '<span style="color:var(--text-3)">pending</span>' : fmtPrice(fc.actual_price)}</td>
+            <td class="ph-num ${movePct !== '—' ? dirCls : ''}">${movePct}</td>
+            <td><span class="ph-outcome ${outClass}">${outLabel}</span></td>
+            <td class="ph-num">${confStr}</td>
+        </tr>`
+    }).join('')
 }
 
 document.addEventListener('DOMContentLoaded', init)

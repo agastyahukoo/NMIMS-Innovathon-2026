@@ -57,6 +57,7 @@
                     </div>
                     <button class="term-toggle-btn" id="termToggleBtn">~ Terminal</button>
                     <button class="term-toggle-btn" id="analyticsBtn" style="color:var(--neutral);border-color:rgba(255,214,10,0.2)">⬡ Analytics</button>
+                    <button class="term-toggle-btn" id="phBtn" style="color:rgba(90,180,255,0.75);border-color:rgba(90,180,255,0.15)">◈ Price History</button>
                 </div>
             </aside>
 
@@ -93,7 +94,24 @@
 
                 <section class="predict-section" id="predictSection">
                     <div class="section-header">
-                        <span class="section-title">Forecast &amp; Signal</span>
+                        <span class="section-title">Price Forecasts</span>
+                        <span class="section-meta" id="forecastGridUpdated">—</span>
+                    </div>
+                    <div class="forecast-grid-wrap" id="forecastGrid">
+                        <div class="fc-loading"><div class="spin spin--sm"></div><span>Loading…</span></div>
+                    </div>
+                    <div class="forecast-history-wrap" id="forecastHistory">
+                        <div class="fh-header">
+                            <span class="fh-title">Accuracy</span>
+                            <button class="fh-see-all" id="phToggleBtn">See all →</button>
+                        </div>
+                        <div class="fh-empty">Predictions evaluate after each horizon elapses</div>
+                    </div>
+                </section>
+
+                <section class="predict-section signal-section" id="signalSection">
+                    <div class="section-header">
+                        <span class="section-title">Signal &amp; Evidence</span>
                         <span class="section-meta" id="predictUpdated">—</span>
                     </div>
                     <div class="predict-body" id="predictBody">
@@ -158,6 +176,51 @@
             <div class="term-output" id="terminalOutput"></div>
         </div>
 
+        <div class="ph-panel hidden" id="priceHistoryPanel">
+            <div class="ph-header">
+                <div class="ph-header-left">
+                    <span class="term-dot term-dot--red"></span>
+                    <span class="term-dot term-dot--yellow"></span>
+                    <span class="term-dot term-dot--green"></span>
+                    <span class="ph-title">Price Forecast History</span>
+                </div>
+                <div class="ph-header-right">
+                    <span class="ph-hint" id="phCoinLabel">Press P to toggle</span>
+                    <button class="ph-clear-btn" id="phCloseBtn">Close ✕</button>
+                </div>
+            </div>
+            <div class="ph-filters" id="phFilters">
+                <span class="ph-filter-label">Horizon:</span>
+                <button class="ph-filter-btn active" data-h="all">All</button>
+                <button class="ph-filter-btn" data-h="1m">1M</button>
+                <button class="ph-filter-btn" data-h="5m">5M</button>
+                <button class="ph-filter-btn" data-h="15m">15M</button>
+                <button class="ph-filter-btn" data-h="1h">1H</button>
+                <button class="ph-filter-btn" data-h="4h">4H</button>
+                <button class="ph-filter-btn" data-h="1d">1D</button>
+            </div>
+            <div class="ph-stats-row" id="phStatsRow"></div>
+            <div class="ph-table-wrap">
+                <table class="ph-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>TF</th>
+                            <th>Entry</th>
+                            <th>Target</th>
+                            <th>Actual</th>
+                            <th class="ph-num">Move</th>
+                            <th>Result</th>
+                            <th class="ph-num">Conf</th>
+                        </tr>
+                    </thead>
+                    <tbody id="phTableBody">
+                        <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:20px;font-size:10px">Loading forecast history…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 
     <div class="overlay hidden" id="setupModal">
@@ -194,6 +257,22 @@
                 <div class="input-row">
                     <input type="password" class="field-input" id="settingsApiKey" placeholder="Your Binance API key">
                     <button class="small-btn" id="saveApiKeyBtn">Save</button>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="field">
+                <label class="field-label">Interface</label>
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Show Scrollbars</div>
+                        <div class="toggle-desc">Dark-themed scrollbars on all panels</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="scrollbarToggle" checked>
+                        <span class="toggle-track"></span>
+                    </label>
                 </div>
             </div>
 

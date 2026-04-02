@@ -137,6 +137,23 @@ def init_db():
             ml_sharpe REAL, bh_sharpe REAL, alpha REAL,
             technical_accuracy REAL, created_at INTEGER
         );
+        CREATE TABLE IF NOT EXISTS price_forecasts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            horizon TEXT NOT NULL,
+            current_price REAL,
+            price_target REAL,
+            pct_change REAL,
+            direction TEXT,
+            confidence REAL,
+            price_lower REAL,
+            price_upper REAL,
+            created_at INTEGER,
+            eval_at INTEGER,
+            actual_price REAL,
+            hit_target INTEGER,
+            actual_pct REAL
+        );
     ''')
     conn.commit()
 
@@ -275,6 +292,110 @@ def compute_technical_prediction(candles, horizon='1h'):
         'horizon':    horizon,
         'score':      round(total, 3),
         'features':   features
+    }
+
+
+# ── Precise price-target forecasting ────────────────────────────────────────
+
+HORIZON_MAP = [
+    ('1m',  1   * 60,  '1m',  200),
+    ('5m',  5   * 60,  '1m',  200),
+    ('15m', 15  * 60,  '1m',  200),
+    ('1h',  1   * 3600,'5m',  200),
+    ('4h',  4   * 3600,'1h',  200),
+    ('1d',  24  * 3600,'4h',  200),
+]
+
+
+def compute_price_target(candles, horizon_label, horizon_seconds):
+    """
+    Precise price target via linear regression on log-prices
+    + RSI / EMA / Bollinger micro-adjustments.
+    Returns target, 90 % CI band, direction, and confidence.
+    """
+    closes = [float(c['close']) for c in candles]
+    if len(closes) < 20:
+        return None
+
+    current_price = float(closes[-1])
+    if len(candles) >= 2:
+        candle_sec = max(1, int(candles[-1]['time']) - int(candles[-2]['time']))
+    else:
+        candle_sec = 60
+    horizon_candles = max(1, round(horizon_seconds / candle_sec))
+
+    window = min(len(closes), max(40, horizon_candles * 3))
+    y      = np.log(np.array(closes[-window:], dtype=float))
+    x      = np.arange(len(y), dtype=float)
+
+    if len(y) >= 4:
+        coeffs = np.polyfit(x, y, 1)
+        slope  = float(coeffs[0])
+        y_hat  = np.polyval(coeffs, x)
+        ss_res = float(np.sum((y - y_hat) ** 2))
+        ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+        r2     = max(0.0, 1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+    else:
+        slope, r2 = 0.0, 0.0
+
+    reversion = min(1.0, 4.0 / max(horizon_candles, 1))
+    reg_pct   = slope * horizon_candles * reversion
+
+    adj = 0.0
+    rsi = _rsi(closes)
+    if   rsi < 28: adj += 0.0025
+    elif rsi < 40: adj += 0.0008
+    elif rsi > 72: adj -= 0.0025
+    elif rsi > 60: adj -= 0.0008
+    if len(closes) >= 21:
+        ema9  = _ema(closes[-9:],  9)
+        ema21 = _ema(closes[-21:], 21)
+        adj  += 0.0015 if ema9 > ema21 else -0.0015
+    bb_upper, bb_mid, bb_lower = _bollinger(closes)
+    bb_rng = bb_upper - bb_lower
+    if bb_rng > 0:
+        bb_pos = (current_price - bb_lower) / bb_rng
+        if   bb_pos < 0.12: adj += 0.0018
+        elif bb_pos > 0.88: adj -= 0.0018
+
+    price_target = current_price * float(np.exp(reg_pct + adj))
+
+    log_rets = np.diff(np.log(np.array(closes[-min(len(closes), 30):], dtype=float)))
+    vol_pc   = float(np.std(log_rets)) if len(log_rets) > 1 else 0.01
+    vol_h    = vol_pc * float(np.sqrt(horizon_candles))
+    log_tgt  = float(np.log(max(price_target, 1e-9)))
+
+    price_lower = float(np.exp(log_tgt - 1.645 * vol_h))
+    price_upper = float(np.exp(log_tgt + 1.645 * vol_h))
+    pct_change  = (price_target - current_price) / current_price * 100
+
+    dir_thresh = max(0.03, 0.02 * float(np.sqrt(horizon_candles)))
+    if   pct_change >  dir_thresh: direction = 'UP'
+    elif pct_change < -dir_thresh: direction = 'DOWN'
+    else:                          direction = 'SIDEWAYS'
+
+    band_pct       = (price_upper - price_lower) / max(current_price, 1e-9)
+    tightness      = max(0.0, 1.0 - band_pct * 4.0)
+    horizon_factor = max(0.30, 1.0 - (horizon_seconds / 86400.0) * 0.55)
+    confidence     = round(float(np.clip(
+        (r2 * 0.25 + tightness * 0.35 + 0.40) * horizon_factor, 0.18, 0.87
+    )), 3)
+
+    def _fmt(p):
+        if p >= 1000: return round(float(p), 2)
+        if p >= 1:    return round(float(p), 4)
+        return round(float(p), 6)
+
+    return {
+        'direction':     direction,
+        'price_target':  _fmt(price_target),
+        'price_lower':   _fmt(price_lower),
+        'price_upper':   _fmt(price_upper),
+        'pct_change':    round(float(pct_change), 3),
+        'confidence':    confidence,
+        'current_price': _fmt(current_price),
+        'horizon':       horizon_label,
+        'r2':            round(r2, 3),
     }
 
 
@@ -1519,6 +1640,151 @@ def unload_model():
         return jsonify({'success': resp.status_code == 200})
     except Exception as e:
         return jsonify({'error': clean_error(e)}), 500
+
+
+@app.route('/multi-forecast', methods=['POST'])
+def multi_forecast():
+    body   = request.json or {}
+    symbol = body.get('symbol', 'BTC').upper()
+    if not valid_symbol(symbol):
+        return jsonify({'error': 'Invalid symbol'}), 400
+
+    ticker  = COIN_TICKERS.get(symbol, symbol + 'USDT')
+    key     = os.getenv('BINANCE_API_KEY', '')
+    headers = {'X-MBX-APIKEY': key} if key else {}
+    ts_now  = int(time.time())
+
+    needed_ivs   = list({h[2] for h in HORIZON_MAP})
+    candle_cache = {}
+
+    def _fetch_iv(iv):
+        try:
+            resp = requests.get(f'{BINANCE_BASE}/klines',
+                                params={'symbol': ticker, 'interval': iv, 'limit': 200},
+                                headers=headers, timeout=12)
+            raw = resp.json()
+            if isinstance(raw, list):
+                candle_cache[iv] = [
+                    {'time': c[0]//1000, 'open': float(c[1]), 'high': float(c[2]),
+                     'low': float(c[3]), 'close': float(c[4]), 'volume': float(c[5])}
+                    for c in raw
+                ]
+        except Exception:
+            candle_cache[iv] = []
+
+    threads = [threading.Thread(target=_fetch_iv, args=(iv,), daemon=True) for iv in needed_ivs]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=15)
+
+    results = []
+    conn    = get_db()
+    for label, horizon_sec, candle_iv, _ in HORIZON_MAP:
+        candles = candle_cache.get(candle_iv, [])
+        if not candles:
+            results.append({'horizon': label, 'error': 'No data'})
+            continue
+        fc = compute_price_target(candles, label, horizon_sec)
+        if fc is None:
+            results.append({'horizon': label, 'error': 'Insufficient data'})
+            continue
+        eval_at = ts_now + horizon_sec
+        try:
+            conn.execute(
+                'INSERT INTO price_forecasts '
+                '(symbol,horizon,current_price,price_target,pct_change,direction,'
+                'confidence,price_lower,price_upper,created_at,eval_at) '
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                (symbol, label, fc['current_price'], fc['price_target'], fc['pct_change'],
+                 fc['direction'], fc['confidence'], fc['price_lower'], fc['price_upper'],
+                 ts_now, eval_at)
+            )
+        except Exception:
+            pass
+        results.append({**fc, 'created_at': ts_now, 'eval_at': eval_at})
+
+    conn.commit(); conn.close()
+    return jsonify({'forecasts': results, 'symbol': symbol, 'created_at': ts_now})
+
+
+@app.route('/forecast-history')
+def forecast_history():
+    symbol = request.args.get('symbol', 'BTC').upper()
+    limit  = min(int(request.args.get('limit', 100)), 500)
+    if not valid_symbol(symbol):
+        return jsonify({'error': 'Invalid symbol'}), 400
+
+    threading.Thread(target=_evaluate_forecasts_internal, daemon=True).start()
+
+    conn = get_db()
+    rows = conn.execute(
+        'SELECT id,symbol,horizon,current_price,price_target,pct_change,direction,'
+        'confidence,price_lower,price_upper,created_at,eval_at,actual_price,hit_target,actual_pct '
+        'FROM price_forecasts WHERE symbol=? ORDER BY created_at DESC LIMIT ?',
+        (symbol, limit)
+    ).fetchall()
+    conn.close()
+
+    forecasts = [dict(r) for r in rows]
+    stats     = {}
+    for fc in forecasts:
+        h = fc['horizon']
+        if h not in stats:
+            stats[h] = {'total': 0, 'evaluated': 0, 'hits': 0}
+        stats[h]['total'] += 1
+        if fc['actual_price'] is not None:
+            stats[h]['evaluated'] += 1
+            if fc['hit_target']:
+                stats[h]['hits'] += 1
+    for h, s in stats.items():
+        s['hit_rate'] = round(s['hits'] / s['evaluated'], 3) if s['evaluated'] > 0 else None
+
+    return jsonify({'forecasts': forecasts, 'symbol': symbol, 'stats': stats})
+
+
+def _evaluate_forecasts_internal():
+    now  = int(time.time())
+    conn = get_db()
+    pending = conn.execute(
+        'SELECT id,symbol,current_price,price_lower,price_upper '
+        'FROM price_forecasts WHERE actual_price IS NULL AND eval_at <= ?', (now,)
+    ).fetchall()
+    if not pending:
+        conn.close(); return 0
+
+    key     = os.getenv('BINANCE_API_KEY', '')
+    headers = {'X-MBX-APIKEY': key} if key else {}
+    by_sym  = {}
+    for row in pending:
+        by_sym.setdefault(row['symbol'], []).append(row)
+
+    evaluated = 0
+    for sym, rows in by_sym.items():
+        ticker = COIN_TICKERS.get(sym, sym + 'USDT')
+        try:
+            r      = requests.get(f'{BINANCE_BASE}/ticker/price',
+                                  params={'symbol': ticker}, headers=headers, timeout=5)
+            actual = float(r.json()['price'])
+        except Exception:
+            continue
+        for row in rows:
+            lower  = float(row['price_lower'])
+            upper  = float(row['price_upper'])
+            entry  = float(row['current_price'])
+            hit        = 1 if lower <= actual <= upper else 0
+            actual_pct = (actual - entry) / max(entry, 1e-9) * 100
+            conn.execute(
+                'UPDATE price_forecasts SET actual_price=?,hit_target=?,actual_pct=? WHERE id=?',
+                (actual, hit, round(actual_pct, 3), row['id'])
+            )
+            evaluated += 1
+
+    conn.commit(); conn.close()
+    return evaluated
+
+
+@app.route('/evaluate-price-forecasts', methods=['POST'])
+def evaluate_price_forecasts():
+    return jsonify({'evaluated': _evaluate_forecasts_internal()})
 
 
 if __name__ == '__main__':
