@@ -1,6 +1,6 @@
 # Crypto Terminal
 
-A self-hosted crypto intelligence terminal built for **NMIMS Innovathon 2026**, it's a **Self-Hosted LLM Crypto Sentiment & Price Prediction Terminal**. The app combines market data, Reddit sentiment, local LLM analysis, technical signals, Prophet-based ML evaluation, backtesting, and a desktop terminal-style interface. :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1}
+A self-hosted crypto intelligence terminal built for **NMIMS Innovathon 2026**, it's a **Self-Hosted LLM Crypto Sentiment & Price Prediction Terminal**. The app combines market data, Reddit sentiment, local LLM analysis, technical signals, Prophet-based ML evaluation, backtesting, and a desktop terminal-style interface.
 
 ## Overview
 
@@ -13,7 +13,7 @@ Crypto Terminal is a desktop application with a Python backend and an Electron f
 - Prophet-based ML evaluation
 - signal generation and history
 - backtesting and analytics views
-- local SQLite persistence :contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3} :contentReference[oaicite:4]{index=4}
+- local SQLite persistence 
 
 ## Current Feature Set
 
@@ -24,7 +24,7 @@ Crypto Terminal is a desktop application with a Python backend and an Electron f
 - technical indicator-based directional prediction
 - Prophet-based ML evaluation and cached model usage
 - signal generation with explainability fields
-- backtest storage and analytics tracking :contentReference[oaicite:5]{index=5}
+- backtest storage and analytics tracking 
 
 ### Desktop App
 - Electron desktop app
@@ -33,7 +33,7 @@ Crypto Terminal is a desktop application with a Python backend and an Electron f
 - analytics window
 - signal history tab
 - ML evaluation tab
-- settings and model controls :contentReference[oaicite:6]{index=6} :contentReference[oaicite:7]{index=7}
+- settings and model controls 
 
 ## Tech Stack
 
@@ -46,15 +46,15 @@ Crypto Terminal is a desktop application with a Python backend and an Electron f
 - NumPy
 - python-dotenv
 - optional: pandas
-- optional: Prophet :contentReference[oaicite:8]{index=8} :contentReference[oaicite:9]{index=9}
+- optional: Prophet 
 
 ### Frontend
 - Electron
 - HTML/CSS/JavaScript
-- lightweight-charts :contentReference[oaicite:10]{index=10}
+- lightweight-charts 
 
 ### Local Model Runtime
-- Ollama for self-hosted sentiment inference :contentReference[oaicite:11]{index=11}
+- Ollama for self-hosted sentiment inference 
 
 ## Project Structure
 
