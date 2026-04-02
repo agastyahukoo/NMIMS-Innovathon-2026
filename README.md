@@ -4,7 +4,7 @@ A self-hosted crypto intelligence terminal built for **NMIMS Innovathon 2026**, 
 
 ## Overview
 
-Crypto Terminal is a desktop application with a Python backend and an Electron frontend. It is designed as an educational prototype for short-horizon crypto market analysis. The current implementation includes:
+Crypto Terminal is a desktop application with a Python backend and an Electron frontend. We have a lot of features suh as. 
 
 - live market data for major coins
 - Reddit-based sentiment ingestion
