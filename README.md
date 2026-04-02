@@ -1,60 +1,64 @@
 # Crypto Terminal
 
-A self-hosted crypto intelligence terminal built for **NMIMS Innovathon 2026**, it's a **Self-Hosted LLM Crypto Sentiment & Price Prediction Terminal**. The app combines market data, Reddit sentiment, local LLM analysis, technical signals, Prophet-based ML evaluation, backtesting, and a desktop terminal-style interface.
+<p align="center">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-Desktop-47848F?logo=electron&logoColor=white">
+  <img alt="Flask" src="https://img.shields.io/badge/Flask-Backend-000000?logo=flask&logoColor=white">
+  <img alt="Ollama" src="https://img.shields.io/badge/Ollama-Local%20LLM-111111">
+  <img alt="Binance" src="https://img.shields.io/badge/Binance-Market%20Data-F3BA2F?logo=binance&logoColor=black">
+  <img alt="Reddit" src="https://img.shields.io/badge/Reddit-Sentiment-FF4500?logo=reddit&logoColor=white">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-Local%20Storage-003B57?logo=sqlite&logoColor=white">
+  <img alt="Prophet" src="https://img.shields.io/badge/Prophet-ML%20Evaluation-2F6FED">
+</p>
 
-## Overview
+## Specifications
 
-Crypto Terminal is a desktop application with a Python backend and an Electron frontend. We have a lot of features suh as. 
+| Item | Value |
+|---|---|
+| Type | Self-hosted LLM crypto intelligence terminal |
+| Event | NMIMS Innovathon 2026 |
+| Platform | Electron desktop application |
+| Backend | Flask API |
+| Inference | Ollama |
+| Storage | SQLite |
+| Data Sources | Binance, Reddit |
+| Forecasting | Technical signals, Prophet-based evaluation |
 
-- live market data for major coins
-- Reddit-based sentiment ingestion
-- local sentiment analysis through Ollama
-- technical forecasting logic
-- Prophet-based ML evaluation
-- signal generation and history
-- backtesting and analytics views
-- local SQLite persistence 
+## Features
 
-## Current Feature Set
-
-### Data and Intelligence
-- Binance market data integration
-- Reddit post ingestion by coin/topic
-- local LLM sentiment analysis via Ollama
-- technical indicator-based directional prediction
+- Live market data for any Binance-supported trading pair
+- Live candlestick charting with configurable timeframes
+- Local LLM inference through Ollama
+- Support for any locally available Ollama model
+- Support for custom Ollama models and local model switching
+- Validated support up to `deepseek-r1:671b`
+- Reddit sentiment ingestion by coin, keyword, or custom subreddit
+- LLM-based sentiment classification and summary generation
+- Technical indicator-based directional signals
 - Prophet-based ML evaluation and cached model usage
-- signal generation with explainability fields
-- backtest storage and analytics tracking 
+- Signal generation with history and explainability fields
+- Backtesting and analytics views
+- Local SQLite persistence
+- Desktop settings and runtime controls
 
-### Desktop App
-- Electron desktop app
-- live chart panel
-- forecast and signal panel
-- analytics window
-- signal history tab
-- ML evaluation tab
-- settings and model controls 
+## Supported Inputs
 
-## Tech Stack
+| Category | Support |
+|---|---|
+| Coins / Pairs | Any Binance-supported symbol |
+| Timeframes | User-selectable |
+| LLM Models | Any installed Ollama model |
+| Custom Models | Supported |
+| Reddit Sources | Default and custom subreddits |
 
-### Backend
-- Python
-- Flask
-- Flask-CORS
-- Requests
-- SQLite
-- NumPy
-- python-dotenv
-- optional: pandas
-- optional: Prophet 
+## Stack
 
-### Frontend
-- Electron
-- HTML/CSS/JavaScript
-- lightweight-charts 
-
-### Local Model Runtime
-- Ollama for self-hosted sentiment inference 
+| Layer | Technologies |
+|---|---|
+| Frontend | Electron, HTML, CSS, JavaScript, lightweight-charts |
+| Backend | Python, Flask, Flask-CORS, Requests |
+| Data / Storage | SQLite, NumPy |
+| ML / Forecasting | Prophet, pandas |
+| Local AI Runtime | Ollama |
 
 ## Project Structure
 
@@ -75,8 +79,7 @@ Crypto Terminal is a desktop application with a Python backend and an Electron f
 │   ├── analytics.js
 │   ├── splash.html
 │   ├── splash.css
-│   ├── splash.js
-│   └── package.json
+│   └── splash.js
 ├── package.json
 ├── start.sh
 └── README.md
