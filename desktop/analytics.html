@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://localhost:5000 https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' https://cdnjs.cloudflare.com;">
+    <title>Backtesting &amp; Analytics</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="analytics.css">
+</head>
+<body>
+    <div class="at-app">
+
+        <div class="at-titlebar">
+            <span class="at-title">Analytics</span>
+            <span class="at-sub" id="atSubtitle">Configure parameters and run a backtest</span>
+        </div>
+
+        <div class="tab-nav">
+            <button class="tab-btn active" id="tabBacktest" data-tab="backtest">Backtesting</button>
+            <button class="tab-btn" id="tabSignals" data-tab="signals">Signal History</button>
+            <button class="tab-btn" id="tabML" data-tab="ml">ML Evaluation</button>
+        </div>
+
+        <div id="backtestPane">
+            <div class="at-controls">
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Coin</label>
+                    <select class="ctrl-select" id="atSymbol">
+                        <option value="BTC">BTC</option>
+                        <option value="ETH">ETH</option>
+                        <option value="SOL">SOL</option>
+                        <option value="BNB">BNB</option>
+                        <option value="XRP">XRP</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Interval</label>
+                    <select class="ctrl-select" id="atInterval">
+                        <option value="15m">15m</option>
+                        <option value="1h" selected>1h</option>
+                        <option value="4h">4h</option>
+                        <option value="1d">1d</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Horizon (candles ahead)</label>
+                    <select class="ctrl-select" id="atHorizon">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="4" selected>4</option>
+                        <option value="8">8</option>
+                        <option value="12">12</option>
+                        <option value="24">24</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Min Confidence</label>
+                    <div class="slider-row">
+                        <input type="range" class="ctrl-slider" id="atThreshold" min="30" max="80" value="55" step="5">
+                        <span class="slider-val" id="atThresholdVal">55%</span>
+                    </div>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Candles (lookback)</label>
+                    <select class="ctrl-select" id="atLookback">
+                        <option value="150">150</option>
+                        <option value="300" selected>300</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+                <button class="run-btn" id="atRunBtn">▶ Run Backtest</button>
+            </div>
+
+            <div class="at-metrics hidden" id="atMetrics">
+                <div class="metric-card" id="mcWinRate">
+                    <div class="metric-label">Win Rate</div>
+                    <div class="metric-val" id="mvWinRate">—</div>
+                </div>
+                <div class="metric-card" id="mcSignals">
+                    <div class="metric-label">Active Signals</div>
+                    <div class="metric-val" id="mvSignals">—</div>
+                </div>
+                <div class="metric-card" id="mcSharpe">
+                    <div class="metric-label">Sharpe Ratio</div>
+                    <div class="metric-val" id="mvSharpe">—</div>
+                </div>
+                <div class="metric-card" id="mcCumRet">
+                    <div class="metric-label">Cumulative Return</div>
+                    <div class="metric-val" id="mvCumRet">—</div>
+                </div>
+                <div class="metric-card" id="mcAvgRet">
+                    <div class="metric-label">Avg Return / Trade</div>
+                    <div class="metric-val" id="mvAvgRet">—</div>
+                </div>
+                <div class="metric-card" id="mcBuySell">
+                    <div class="metric-label">BUY / SELL / HOLD</div>
+                    <div class="metric-val" id="mvBuySell">—</div>
+                </div>
+            </div>
+
+            <div class="at-body">
+                <div class="at-chart-panel">
+                    <div class="panel-header">Equity Curve (Cumulative Return)</div>
+                    <div class="chart-wrap">
+                        <canvas id="pnlChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="at-log-panel">
+                    <div class="panel-header">
+                        <span>Signal Log</span>
+                        <span class="log-count" id="logCount"></span>
+                    </div>
+                    <div class="log-table-wrap">
+                        <table class="log-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Action</th>
+                                    <th>Conf</th>
+                                    <th>Actual</th>
+                                    <th>Result</th>
+                                    <th>Return</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="at-status" id="atStatus">
+                <div class="status-idle" id="statusIdle">Ready — configure parameters above and press Run Backtest</div>
+                <div class="status-loading hidden" id="statusLoading">
+                    <div class="spin-sm"></div>
+                    <span id="statusText">Fetching candles…</span>
+                </div>
+                <div class="status-error hidden" id="statusError"></div>
+            </div>
+        </div>
+
+        <div id="signalsPane" class="hidden sh-pane">
+
+            <div class="sh-controls">
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Filter by Coin</label>
+                    <select class="ctrl-select" id="shSymbol">
+                        <option value="">All Coins</option>
+                        <option value="BTC">BTC</option>
+                        <option value="ETH">ETH</option>
+                        <option value="SOL">SOL</option>
+                        <option value="BNB">BNB</option>
+                        <option value="XRP">XRP</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Filter by Action</label>
+                    <select class="ctrl-select" id="shAction">
+                        <option value="">All Signals</option>
+                        <option value="BUY">BUY</option>
+                        <option value="SELL">SELL</option>
+                        <option value="HOLD">HOLD</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Source</label>
+                    <select class="ctrl-select" id="shSource">
+                        <option value="">All Sources</option>
+                        <option value="pipeline">Pipeline (Full)</option>
+                    </select>
+                </div>
+                <button class="run-btn" id="shRefreshBtn">↻ Refresh</button>
+                <button class="run-btn sh-eval-btn" id="shEvalBtn">⚙ Evaluate Outcomes</button>
+            </div>
+
+            <div class="sh-summary hidden" id="shSummary">
+                <div class="sh-metric">
+                    <div class="sh-metric-label">Total Signals</div>
+                    <div class="sh-metric-val" id="shTotal">—</div>
+                </div>
+                <div class="sh-metric">
+                    <div class="sh-metric-label">Win Rate</div>
+                    <div class="sh-metric-val" id="shWinRate">—</div>
+                </div>
+                <div class="sh-metric">
+                    <div class="sh-metric-label">Wins</div>
+                    <div class="sh-metric-val sh-win" id="shWins">—</div>
+                </div>
+                <div class="sh-metric">
+                    <div class="sh-metric-label">Losses</div>
+                    <div class="sh-metric-val sh-loss" id="shLosses">—</div>
+                </div>
+                <div class="sh-metric">
+                    <div class="sh-metric-label">Pending Eval</div>
+                    <div class="sh-metric-val sh-pending" id="shPending">—</div>
+                </div>
+                <div class="sh-metric">
+                    <div class="sh-metric-label">No Price Data</div>
+                    <div class="sh-metric-val" id="shNoprice">—</div>
+                </div>
+            </div>
+
+            <div class="sh-table-wrap">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Coin</th>
+                            <th>Signal</th>
+                            <th>Conf</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>Outcome</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shBody"></tbody>
+                </table>
+            </div>
+
+            <div class="at-status">
+                <div id="shStatusText" class="status-idle">Select filters and press Refresh to load signal history</div>
+                <div class="status-loading hidden" id="shLoading">
+                    <div class="spin-sm"></div>
+                    <span id="shLoadingText">Loading…</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="mlPane" class="hidden sh-pane">
+
+            <div class="sh-controls">
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Coin</label>
+                    <select class="ctrl-select" id="mlSymbol">
+                        <option value="BTC">BTC</option>
+                        <option value="ETH">ETH</option>
+                        <option value="SOL">SOL</option>
+                        <option value="BNB">BNB</option>
+                        <option value="XRP">XRP</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Interval</label>
+                    <select class="ctrl-select" id="mlInterval">
+                        <option value="15m">15m</option>
+                        <option value="1h" selected>1h</option>
+                        <option value="4h">4h</option>
+                        <option value="1d">1d</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Prediction Horizon</label>
+                    <select class="ctrl-select" id="mlHorizon">
+                        <option value="1" selected>1 candle</option>
+                        <option value="2">2 candles</option>
+                        <option value="4">4 candles</option>
+                        <option value="8">8 candles</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label class="ctrl-label">Historical Candles</label>
+                    <select class="ctrl-select" id="mlLookback">
+                        <option value="300">300</option>
+                        <option value="500" selected>500</option>
+                    </select>
+                </div>
+                <button class="run-btn" id="mlRunBtn">&#9654; Run Evaluation</button>
+            </div>
+
+            <div class="ml-install-note hidden" id="mlInstallNote">
+                <span class="ml-note-icon">&#9888;</span>
+                <span id="mlInstallText">Prophet not installed. Run: <code>pip install prophet scikit-learn</code> then restart the backend.</span>
+            </div>
+
+            <div class="ml-summary hidden" id="mlSummary">
+                <div class="ml-sum-card ml-sum-primary">
+                    <div class="ml-sum-label">Directional Accuracy</div>
+                    <div class="ml-sum-val" id="mlAccuracy">—</div>
+                    <div class="ml-sum-sub" id="mlAccuracySub"></div>
+                </div>
+                <div class="ml-sum-card">
+                    <div class="ml-sum-label">Baseline (Always UP)</div>
+                    <div class="ml-sum-val" id="mlBaseline">—</div>
+                </div>
+                <div class="ml-sum-card">
+                    <div class="ml-sum-label">Lift vs Baseline</div>
+                    <div class="ml-sum-val" id="mlLift">—</div>
+                </div>
+                <div class="ml-sum-card">
+                    <div class="ml-sum-label">ML Sharpe</div>
+                    <div class="ml-sum-val" id="mlSharpe">—</div>
+                </div>
+                <div class="ml-sum-card">
+                    <div class="ml-sum-label">B&amp;H Sharpe</div>
+                    <div class="ml-sum-val" id="mlBhSharpe">—</div>
+                </div>
+                <div class="ml-sum-card">
+                    <div class="ml-sum-label">Alpha vs B&amp;H</div>
+                    <div class="ml-sum-val" id="mlAlpha">—</div>
+                </div>
+                <div class="ml-sum-card">
+                    <div class="ml-sum-label">Technical Accuracy</div>
+                    <div class="ml-sum-val" id="mlTechAcc">—</div>
+                </div>
+                <div class="ml-sum-card">
+                    <div class="ml-sum-label">ML Edge vs Tech</div>
+                    <div class="ml-sum-val" id="mlEdge">—</div>
+                </div>
+            </div>
+
+            <div class="ml-body hidden" id="mlBody">
+                <div class="ml-chart-panel">
+                    <div class="panel-header">Equity Curves: ML Strategy vs Buy &amp; Hold</div>
+                    <div class="chart-wrap">
+                        <canvas id="mlPnlChart"></canvas>
+                    </div>
+                </div>
+                <div class="ml-detail-panel">
+                    <div class="panel-header">Classification Report</div>
+                    <div class="ml-report-wrap">
+                        <div class="ml-cm-section">
+                            <div class="ml-cm-title">Confusion Matrix (UP class)</div>
+                            <div class="ml-cm-grid" id="mlCMGrid"></div>
+                        </div>
+                        <table class="ml-report-table" id="mlReportTable">
+                            <thead>
+                                <tr>
+                                    <th>Class</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>F1</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mlReportBody"></tbody>
+                        </table>
+                        <div class="ml-split-info" id="mlSplitInfo"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="at-status">
+                <div class="status-idle" id="mlStatusIdle">Select parameters and press Run Evaluation — Prophet trains on 80% of data and evaluates on the held-out 20%</div>
+                <div class="status-loading hidden" id="mlStatusLoading">
+                    <div class="spin-sm"></div>
+                    <span id="mlStatusText">Training Prophet model&hellip;</span>
+                </div>
+                <div class="status-error hidden" id="mlStatusError"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="analytics.js"></script>
+</body>
+</html>

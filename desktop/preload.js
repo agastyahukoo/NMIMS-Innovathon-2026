@@ -1,7 +1,26 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    openExternal: (url) => ipcRenderer.invoke('open-external', url),
-    getVersion: () => ipcRenderer.invoke('get-version'),
-    platform: process.platform
+    platform:          process.platform,
+    openExternal:      url  => ipcRenderer.invoke('open-external', url),
+    getVersion:        ()   => ipcRenderer.invoke('get-version'),
+    backendReady:      ()   => ipcRenderer.invoke('backend-ready'),
+    getCoins:          ()   => ipcRenderer.invoke('get-coins'),
+    saveCoins:         c    => ipcRenderer.invoke('save-coins', c),
+    setActiveCoin:     s    => ipcRenderer.invoke('set-active-coin', s),
+    setActiveModel:    n    => ipcRenderer.invoke('set-active-model', n),
+    refreshMenu:       ()   => ipcRenderer.invoke('refresh-menu'),
+    openAnalytics:     ()   => ipcRenderer.invoke('open-analytics'),
+    showNotification:  (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
+    onSetCoin:           fn => ipcRenderer.on('set-coin',            (_, d) => fn(d)),
+    onSetModel:          fn => ipcRenderer.on('set-model',           (_, d) => fn(d)),
+    onTriggerRefresh:    fn => ipcRenderer.on('trigger-refresh',     ()    => fn()),
+    onToggleTerminal:    fn => ipcRenderer.on('toggle-terminal',     ()    => fn()),
+    onShowAbout:         fn => ipcRenderer.on('show-about',          ()    => fn()),
+    onOpenCustomMarket:  fn => ipcRenderer.on('open-custom-market',  ()    => fn()),
+    onOpenMarketManager: fn => ipcRenderer.on('open-market-manager', ()    => fn()),
+    onOpenModelDownload: fn => ipcRenderer.on('open-model-download', ()    => fn()),
+    onOpenModelDelete:   fn => ipcRenderer.on('open-model-delete',   ()    => fn()),
+    onModelLoad:         fn => ipcRenderer.on('model-load',   (_, m) => fn(m)),
+    onModelUnload:       fn => ipcRenderer.on('model-unload', (_, m) => fn(m)),
 })
